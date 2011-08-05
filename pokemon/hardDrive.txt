@@ -1,0 +1,16 @@
+Hard Drive
+hardDrive.png
+Boot
+18
+9
+6
+25
+25
+3
+7
+1000
+7
+0
+0
+0
+0

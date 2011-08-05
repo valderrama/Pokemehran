@@ -1,0 +1,16 @@
+Mehran
+mehran.png
+Binary Blast
+20
+15
+5
+40
+40
+1
+0
+10
+10000
+1
+1
+1
+1

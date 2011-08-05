@@ -1,0 +1,7 @@
+Bugs:
+
+1) defense up doesn't work, switched attack up by accident
+
+2) walking to a portal vertically
+
+3) music at end

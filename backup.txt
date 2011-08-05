@@ -1,0 +1,1202 @@
+import acm.program.*;
+import acm.util.*;
+import acm.graphics.*;
+
+import java.applet.AudioClip;
+import java.awt.*;
+import java.awt.event.KeyEvent;
+import java.awt.event.MouseEvent;
+import java.io.*;
+
+
+public class Pokemehran extends GraphicsProgram implements PokemehranConstants {
+	
+	private int charX;
+	private int charY;
+	private int charXprev;
+	private int charYprev;
+	private int musicNo;
+	private double charXpixel;
+	private double charYpixel;
+	private double charXportal;
+	private double charYportal;
+	private boolean characterCenteredH=true;
+	private boolean characterCenteredV=true;
+	private boolean notClicked = true;
+	private boolean hasEscaped = false;
+	private boolean inWorldMap = true;
+	private boolean inMenu = false;
+	private boolean takeCommand = false;
+	private boolean currentlyHealing = false;
+	private boolean paidMafia = false;
+	private boolean playerWon;
+	private char motionDirection;
+	private boolean[] charEdgeReached = new boolean[4];
+	private boolean[] edgeReached = new boolean[4];
+	private boolean[] walkeable = new boolean[4];
+	private GImage character=CHAR_FRONT;
+	private GImage mafia;
+	private GImage mehranSprite = new GImage("characters\\mehran.png");
+	private GImage enemySprite;
+	private GLabel mHP;
+	private GLabel eHP;
+	private GLabel mInfo;
+	private GLabel eInfo;
+	private GLabel battleMessage = new GLabel("");
+	private GRect mHPbar;
+	private GRect eHPbar;
+	private Background world; 
+	private Background store1;
+	private Background currentBack;
+	private Menu pauseMenu;
+	private String wantsToHeal = "";
+	private String battleCommand = "";
+	private String characterPressed = "";
+	private String menuCharacterSelected ="";
+	private String menuCommandSelected ="";
+	private String[][] mapArray;
+	private String[][] walkeableArray;
+	private AudioClip mainTheme = MediaTools.loadAudioClip("101-opening.wav");
+	private AudioClip preludeTheme = MediaTools.loadAudioClip("IntroScreen\\prelude.wav");
+	private AudioClip fighting1 = MediaTools.loadAudioClip("battle\\fighting1.wav");
+	private AudioClip fighting2 = MediaTools.loadAudioClip("battle\\fighting2.wav");
+	private AudioClip fighting3 = MediaTools.loadAudioClip("battle\\fighting3.wav");
+	private AudioClip fighting4 = MediaTools.loadAudioClip("battle\\fighting4.wav");
+	private AudioClip fighting5 = MediaTools.loadAudioClip("battle\\fighting5.wav");
+	private AudioClip victory = MediaTools.loadAudioClip("battle\\victory.wav");
+	private AudioClip binaryBlastSound = MediaTools.loadAudioClip("battle\\binaryBlastSound.wav");
+	private AudioClip tackle = MediaTools.loadAudioClip("battle\\tackle.wav");
+	private AudioClip mehranSound = MediaTools.loadAudioClip("battle\\mehranSound.wav");
+	private AudioClip healSound = MediaTools.loadAudioClip("healing\\healSound.wav");
+	private AudioClip healSong = MediaTools.loadAudioClip("healing\\healSong.wav");
+	private PokemehranCharacter mehran = new PokemehranCharacter("characters\\mehran");
+	private PokemehranCharacter enemy;
+	private RandomGenerator rgen = RandomGenerator.getInstance();
+	private boolean inBattle = false;
+	private boolean sameSquare = false;
+	
+	public void init() {
+		addKeyListeners();
+		addMouseListeners();
+	}
+	
+	public void mouseClicked(MouseEvent e) {
+		notClicked = false;
+	}
+	
+	public void keyPressed(KeyEvent e){
+		characterPressed = ""+e.getKeyChar();
+		if (inBattle == false && currentlyHealing == false && inMenu == false) {
+			motionDirection = e.getKeyChar();
+		}
+		if (inBattle == true && takeCommand == true) {
+			battleCommand = ""+e.getKeyChar();
+		}
+		if (currentlyHealing == true) {
+			if ((""+e.getKeyChar()).equals("y")) {
+				wantsToHeal = "y";
+			}
+			else if((""+e.getKeyChar()).equals("n")) {
+				wantsToHeal = "n";
+			}
+		}
+		if (inMenu == true) {
+			menuCharacterSelected = ""+e.getKeyChar();
+		}
+	}
+	
+	public void run() {
+		pregameSetup();
+		createInitialBackground();
+		while (true) {
+			checkMenu();
+			getCharacterLocation();
+			checkPortal();
+			getCharacterLocation();
+			motionOnMap();
+			getCharacterLocation();
+			checkSameSquare();
+			battleCheck();
+			healingCheck();
+			
+		}
+	}
+	
+	private void saveGame() {
+		try {
+			PrintWriter save = new PrintWriter(new FileWriter("continue.txt"));
+			save.println(mehran.getName());
+			save.println(mehran.getImageFile());
+			save.println(mehran.getAttackName());
+			save.println(mehran.getAttack());
+			save.println(mehran.getDefense());
+			save.println(mehran.getSpeed());
+			save.println(mehran.getHPMax());
+			save.println(mehran.getHPCur());
+			save.println(mehran.getLevel());
+			save.println(mehran.getExperience());
+			save.println(mehran.getToNextLevel());
+			save.println(mehran.getMoney());
+			save.println(mehran.getItem("Potion"));
+			save.println(mehran.getItem("X Potion"));
+			save.println(mehran.getItem("Attack Up"));
+			save.println(mehran.getItem("Defense Up"));
+			save.println(currentBack.toString());
+			save.println(currentBack.getX());
+			save.println(currentBack.getY());
+			save.println(character.getX());
+			save.println(character.getY());
+			save.close();
+		} catch(IOException ex) {
+		}
+	}
+	
+	private void menuSetup() {
+		inMenu = true;
+		pauseMenu = new Menu(mehran);
+		menuCommandSelected = "";
+		add(pauseMenu);
+		remove(currentBack);
+		remove(character);
+	}
+	
+	private void menuFinish() {
+		add(currentBack);
+		add(character);
+		remove(pauseMenu);
+		inMenu = false;
+	}
+	
+	private void checkItemMenuOptions() {
+		if(pauseMenu.atItemMenu() == true && menuCommandSelected.equals("Exit") && characterPressed.equals(" ")) {
+			characterPressed = "";
+			pauseMenu.switchMenu();
+		} else if(pauseMenu.atItemMenu() == true && menuCommandSelected.equals("Potion") && characterPressed.equals(" ")) {
+			characterPressed = "";
+			if(mehran.getItem("Potion")>0) {
+				mehran.hpUp(50);
+				mehran.removeItem("Potion");
+				pauseMenu.updateInfoLabels();
+				pauseMenu.updateItemLabels();
+			}
+		} else if(pauseMenu.atItemMenu() == true && menuCommandSelected.equals("X Potion") && characterPressed.equals(" ")) {
+			characterPressed = "";
+			if(mehran.getItem("X Potion")>0) {
+				mehran.heal();
+				mehran.removeItem("X Potion");
+				pauseMenu.updateInfoLabels();
+				pauseMenu.updateItemLabels();
+			}
+		}
+	}
+	
+	private void checkMenu() {
+		if(characterPressed.equals("p")) {
+			menuSetup();
+			
+			while(true) {
+				if (menuCharacterSelected.equals("a")||
+					menuCharacterSelected.equals("s")||
+					menuCharacterSelected.equals("d")) {
+						pauseMenu.setSelected(menuCharacterSelected);
+						menuCharacterSelected = "";
+				}
+				menuCommandSelected = pauseMenu.getSelectedString();
+				if(pauseMenu.atMainMenu() == true && menuCommandSelected.equals("Exit") && characterPressed.equals(" ")) {
+					characterPressed = "";
+					break;
+				} else if(pauseMenu.atMainMenu() == true && menuCommandSelected.equals("Save") && characterPressed.equals(" ")) {
+					saveGame();
+					add(B2_FRAME);
+					GLabel message = new GLabel("Game Saved!");
+					message.setFont(new Font("helvetica",Font.PLAIN,30));
+					message.setLocation(B2_FRAME.getWidth()/2-message.getWidth()/2,B2_FRAME.getHeight()/2+message.getAscent()/3);
+					add(message);
+					pause(1000);
+					remove(message);
+					remove(B2_FRAME);
+					characterPressed = "";
+				} else if(pauseMenu.atMainMenu() == true && menuCommandSelected.equals("Item") && characterPressed.equals(" ")) {
+					characterPressed = "";
+					pauseMenu.switchMenu();
+				}
+				checkItemMenuOptions();
+			}
+			menuFinish();
+		}
+	}
+	
+	private void healingCheck() {
+		String check = ""+mapArray[charY][charX].charAt(0);
+		if (check.equals("h")==true && sameSquare == false) {
+			mainTheme.stop();
+			healSong.loop();
+			currentlyHealing = true;
+			checkWantToRest();
+			paidMafia = false;
+			currentlyHealing = false;
+			healSong.stop();
+			mainTheme.loop();
+		}
+	}
+	
+	private void checkWantToRest() {
+		add(B2_FRAME);
+		GLabel message = new GLabel("Do you want to rest? (y/n)");
+		message.setFont(new Font("helvetica",Font.PLAIN,30));
+		message.setLocation(B2_FRAME.getWidth()/2-message.getWidth()/2,B2_FRAME.getHeight()/2+message.getAscent()/3);
+		add(message);
+		wantsToHeal = "";
+		while(true){
+			if (wantsToHeal.equals("y")) {
+				wantsToHeal = "";
+				healingAnimation();
+				break;
+			}
+			else if(wantsToHeal.equals("n")) {
+				break;
+			}
+		}
+		remove(message);
+		remove(B2_FRAME);
+	}
+	
+	private void healingAnimation() {
+		double x = character.getX();
+		double y = character.getY();
+		remove(character);
+		character = CHAR_SLEEPING;
+		add(character,x,y);
+		add(SLEEP_BUBBLE,character.getX(),character.getY()-UNIT_H);
+		pause(2000);
+		fadeToBlack();
+	}
+	
+	private void fadeToBlack() {
+		remove(SLEEP_BUBBLE);
+		remove(character);
+		GRect n = new GRect(APPLICATION_WIDTH,APPLICATION_HEIGHT);
+		GRect s = new GRect(APPLICATION_WIDTH,APPLICATION_HEIGHT);
+		GRect e = new GRect(APPLICATION_WIDTH,APPLICATION_HEIGHT);
+		GRect w = new GRect(APPLICATION_WIDTH,APPLICATION_HEIGHT);
+		n.setLocation(0,-APPLICATION_HEIGHT);
+		s.setLocation(0,APPLICATION_HEIGHT);
+		e.setLocation(APPLICATION_WIDTH,0);
+		w.setLocation(-APPLICATION_WIDTH,0);
+		n.setFilled(true);
+		s.setFilled(true);
+		e.setFilled(true);
+		w.setFilled(true);
+		add(n);
+		add(s);
+		add(e);
+		add(w);
+		add(character);
+		add(SLEEP_BUBBLE);
+		for(int i=0 ; i<(int)(APPLICATION_WIDTH/2+1) ; i++) {
+			n.move(0,1);
+			s.move(0,-1);
+			e.move(-1,0);
+			w.move(1,0);
+			pause(5);
+		}
+		enterMafiaAnimation();
+		if (paidMafia == true) {
+			remove(character);
+			character = CHAR_SLEEPING;
+			add(character);
+			add(SLEEP_BUBBLE);
+			mehran.heal();
+			healSong.stop();
+			healSound.play();
+			pause(3500);
+			remove(SLEEP_BUBBLE);
+		}
+		
+		remove(n);
+		remove(s);
+		remove(e);
+		remove(w);
+	}
+	
+	private void enterMafiaAnimation() {
+		mafia = MAFIA_BACK;
+		add(mafia,character.getX(),APPLICATION_HEIGHT);
+		for (int i=0 ; i<(int)character.getY() ; i++) {
+			mafia.move(0,-1);
+			pause(10);
+		}
+		pause(1000);
+		
+		remove(SLEEP_BUBBLE);
+		remove(character);
+		character = CHAR_FRONT;
+		add(character);
+		add(EXC_BUBBLE,SLEEP_BUBBLE.getX(),SLEEP_BUBBLE.getY());
+		pause(1000);
+		
+		remove(EXC_BUBBLE);
+		add(B_FRAME);
+		add(MAFIA_PROFILE,FRAME_WIDTH+TEXT_BUFFER,FRAME_WIDTH+TEXT_BUFFER);
+		GLabel message = new GLabel("This is our turf, so if you want to sleep here our");
+		message.setFont(new Font("helvetica",Font.PLAIN,20));
+		message.setLocation
+			(MAFIA_PROFILE.getX()+MAFIA_PROFILE.getWidth()+TEXT_BUFFER,FRAME_WIDTH+TEXT_BUFFER+message.getAscent());
+		GLabel message2 = new GLabel("protection fee is $50 per night, wanna rest? (y/n)");
+		message2.setFont(new Font("helvetica",Font.PLAIN,20));
+		message2.setLocation(message.getX(),message.getY()+message.getAscent()+TEXT_BUFFER);
+		add(message);
+		add(message2);
+		wantsToHeal = "";
+		while(true){
+			if (wantsToHeal.equals("y")) {
+				remove(message);
+				remove(message2);
+				wantsToHeal = "";
+				if(mehran.getMoney()>=50) {
+					message.setLabel("You made the right choice. Sleep well...");
+					add(message);
+					paidMafia=true;
+					mehran.moneyDown(50);
+				}
+				else {
+					message.setLabel("You're gonna need more money than that...");
+					add(message);
+					paidMafia=false;
+					break;
+				}
+				break;
+			}
+			else if(wantsToHeal.equals("n")) {
+				remove(message);
+				remove(message2);
+				message.setLabel("I better not catch you snoozing -- or else...");
+				add(message);
+				paidMafia = false;
+				break;
+			}
+		}
+		pause(2000);
+		
+		remove(B_FRAME);
+		remove(message);
+		remove(MAFIA_PROFILE);
+		remove(mafia);
+		mafia = MAFIA_FRONT;
+		add(mafia,MAFIA_BACK.getX(),MAFIA_BACK.getY());
+		for (int i=0 ; i<(int)character.getY() ; i++) {
+			mafia.move(0,1);
+			pause(10);
+		}
+	}
+	
+	private void battle() {
+		addMusic();
+		battleIntroAnimation();
+		removeAll();
+		setupBattle();
+		characterEntrance();
+		performBattle();
+		stopMusic();
+		getDataForBattle();
+		addWorldMapAfterBattle();
+	}
+	
+	private void addMusic() {
+		mainTheme.stop();
+		musicNo = rgen.nextInt(1,5);
+		switch(musicNo) {
+		case 1: fighting1.loop();
+			break;
+		case 2: fighting2.loop();
+			break;
+		case 3: fighting3.loop();
+			break;
+		case 4: fighting4.loop();
+			break;
+		case 5: fighting5.loop();
+			break;
+		}
+	}
+	
+	private void stopMusic() {
+		switch(musicNo) {
+		case 1: fighting1.stop();
+			break;
+		case 2: fighting2.stop();
+			break;
+		case 3: fighting3.stop();
+			break;
+		case 4: fighting4.stop();
+			break;
+		case 5: fighting5.stop();
+			break;
+		}
+	}
+	
+	private void characterEntrance() {
+		updateBattleMessage("A wild "+enemy.getName()+" appeared!");
+		mehranSprite.setLocation(0-mehranSprite.getWidth(),mehranSprite.getY());
+		enemySprite.setLocation(APPLICATION_WIDTH,FRAME_WIDTH+TEXT_BUFFER);
+		pause(300);
+		while (enemySprite.getX()>3*EBF_WIDTH/2-enemySprite.getWidth()/2) {
+			enemySprite.move(-3,0);
+			pause(5);
+		}
+		enemySprite.setLocation(3*EBF_WIDTH/2-enemySprite.getWidth()/2,enemySprite.getY());
+		pause(200);
+		while (mehranSprite.getX()>FRAME_WIDTH*2) {
+			mehranSprite.move(3,0);
+			pause(5);
+		}
+		mehranSprite.setLocation(FRAME_WIDTH*2,mehranSprite.getY());
+		mehranSound.play();
+	}
+	
+	private void battleIntroAnimation() {
+		add(EXC_BUBBLE,character.getX(),character.getY()-UNIT_H);
+		pause(500);
+		int H = N_UNITS_H;
+		int W = N_UNITS_W;
+		int Hi = N_UNITS_H;
+		int Wi = N_UNITS_W;
+		int x = 0;
+		int y = 0;
+		while (H>0||W>0) {
+			for(int i=0; i<W; i++) {
+				x = (i+(Wi-W)/2)*UNIT_W;
+				y = UNIT_H*(Hi-H)/2;
+				add(new GImage("nn.jpg",x,y));
+				pause(3);	
+			}
+			H--;
+			for(int i=0 ; i<H ; i++) {
+				x = (Wi-(Wi-W)/2-1)*UNIT_W;
+				y = (i+1)*UNIT_H+(Hi-H)/2*UNIT_H;
+				add(new GImage("nn.jpg",x,y));
+				pause(3);
+			}
+			W--;
+			for(int i=0; i<W; i++) {
+				x = (Wi-(Wi-W)/2-2)*UNIT_W-UNIT_W*i;
+				y = UNIT_H*(Hi-(Hi-H)/2-1);
+				add(new GImage("nn.jpg",x,y));
+				pause(3);
+			}
+			H--;
+			for(int i=0 ; i<H ; i++) {
+				x = UNIT_W*((Wi-W)/2);
+				y = (Hi-(Hi-H)/2-i-1)*UNIT_H;
+				add(new GImage("nn.jpg",x,y));
+				pause(3);
+			}
+			W--;
+		}
+	}
+	
+	private void setupBattle() {
+		add(E_FRAME);
+		add(P_FRAME,0,APPLICATION_HEIGHT-PBF_HEIGHT);
+		add(M_FRAME,APPLICATION_WIDTH-M_FRAME.getWidth(),P_FRAME.getY()-M_FRAME.getHeight());
+		
+		mInfo = new GLabel("Lv."+mehran.getLevel()+" "+mehran.getName());
+		eInfo = new GLabel("Lv."+enemy.getLevel()+" "+enemy.getName());
+		mHP = new GLabel("HP: " + mehran.getHPCur() + " / " + mehran.getHPMax());
+		eHP = new GLabel("HP: " + enemy.getHPCur() + " / " + enemy.getHPMax());
+		mInfo.setFont(new Font("helvetica",Font.BOLD,24));
+		eInfo.setFont(new Font("helvetica",Font.BOLD,24));
+		mHP.setFont(new Font("helvetica",Font.BOLD,24));
+		eHP.setFont(new Font("helvetica",Font.BOLD,24));
+		battleMessage.setFont(new Font("helvetica",Font.BOLD,20));
+		
+		eHPbar = new GRect(enemy.getHPCur()*EHP_BAR_WIDTH/enemy.getHPMax(),eHP.getAscent());
+		mHPbar = new GRect(mehran.getHPCur()*PHP_BAR_WIDTH/mehran.getHPMax(),mHP.getAscent());
+		eHPbar.setFilled(true);
+		mHPbar.setFilled(true);
+		
+		if (enemy.getHPCur()>enemy.getHPMax()/2) eHPbar.setFillColor(Color.GREEN);
+		else if (enemy.getHPCur()>enemy.getHPMax()/5)	eHPbar.setFillColor(Color.ORANGE);
+		else eHPbar.setFillColor(Color.RED);
+		if (mehran.getHPCur()>mehran.getHPMax()/2) mHPbar.setFillColor(Color.GREEN);
+		else if (mehran.getHPCur()>mehran.getHPMax()/5) mHPbar.setFillColor(Color.ORANGE);
+		else mHPbar.setFillColor(Color.RED);
+		enemySprite = new GImage(enemy.getImageFile());
+		
+		eInfo.setLocation(FRAME_WIDTH+TEXT_BUFFER,E_FRAME.getY()+FRAME_WIDTH+TEXT_BUFFER+eHP.getAscent());
+		eHP.setLocation(eInfo.getX(),eInfo.getY()+eInfo.getAscent()+TEXT_BUFFER);
+		eHPbar.setLocation(eHP.getX(),eHP.getY()+TEXT_BUFFER);
+		mHPbar.setLocation(FRAME_WIDTH+TEXT_BUFFER,P_FRAME.getY()+FRAME_WIDTH+TEXT_BUFFER);
+		mInfo.setLocation(mHPbar.getX(),mHPbar.getY()+mHPbar.getHeight()+mInfo.getAscent()+TEXT_BUFFER);
+		mHP.setLocation(mInfo.getX(),mInfo.getY()+mInfo.getAscent()+TEXT_BUFFER);
+		enemySprite.setLocation(3*EBF_WIDTH/2-enemySprite.getWidth()/2,FRAME_WIDTH+TEXT_BUFFER);
+		mehranSprite.setLocation(FRAME_WIDTH*2,APPLICATION_HEIGHT-PBF_HEIGHT-mehranSprite.getHeight());
+		battleMessage.setLocation(M_FRAME.getX()+M_FRAME.getWidth()/2-battleMessage.getWidth()/2,
+								  M_FRAME.getY()+M_FRAME.getHeight()/2+battleMessage.getAscent()/2);
+		
+		add(mHP);
+		add(eHP);
+		add(mInfo);
+		add(eInfo);
+		add(mHPbar);
+		add(eHPbar);
+		add(battleMessage);
+		add(enemySprite);
+		add(mehranSprite);
+		
+		
+	}
+	
+	private void update() {
+		removeAll();
+		setupBattle();
+	}
+	
+	private void updateBattleMessage(String message) {
+		remove(battleMessage);
+		battleMessage.setLabel(message);
+		battleMessage.setLocation(M_FRAME.getX()+M_FRAME.getWidth()/2-battleMessage.getWidth()/2,
+				  M_FRAME.getY()+M_FRAME.getHeight()/2+battleMessage.getAscent()/2);
+		add(battleMessage);
+	}
+	
+	private void performBattle() {
+		while(enemy.getHPCur() > 0 && mehran.getHPCur() > 0 && hasEscaped == false) {
+			if (mehran.getSpeed()>=enemy.getSpeed()) {
+				playerBattleTurn();
+				if(hasEscaped == true) break;
+				if(enemy.getHPCur()==0) break;
+				enemyBattleTurn();
+			}
+			else {
+				enemyBattleTurn();
+				if(mehran.getHPCur()==0) break;
+				playerBattleTurn();
+				if(hasEscaped == true) break;
+			}
+			update();
+		}
+		if (enemy.getHPCur()<=0)  {
+			playerWon = true;
+			updateBattleMessage("Enemy "+enemy.getName()+" feinted.");
+			pause(500);
+			animateFeint(enemySprite);
+			updateBattleMessage("You Won!");
+		}
+		else if (hasEscaped == true) {
+			
+		}
+		else {
+			updateBattleMessage("Mehran feinted.");
+			playerWon = false;
+			pause(500);
+			animateFeint(mehranSprite);
+			updateBattleMessage("You Lost.");
+		}
+		pause(1500);
+		hasEscaped = false;
+	}
+	
+	private void playerBattleTurn() {
+		updateBattleMessage("Player's Turn");
+		battleCommand = "";
+		takeCommand=true;
+		while(true) {
+			if (battleCommand.equals("a")) {
+				takeCommand = false;
+				updateBattleMessage("Binary Blast!");
+				binaryBlastAnimation();
+				attack(mehran,enemy);
+				battleCommand = "";
+				break;
+			}
+			if (battleCommand.equals("s")) {
+				takeCommand = false;
+				battleCommand = "";
+				item();
+				if(battleCommand.equals("q")) {
+					battleCommand = "";
+					takeCommand = true;
+				}
+				else {
+					battleCommand = "";
+					break;
+				}
+			}
+			if (battleCommand.equals("d")) {
+				takeCommand = false;
+				hasEscaped = escape(mehran,enemy);
+				battleCommand = "";
+				break;
+			}
+		}
+		update();
+		pause(1500);
+		
+	}
+	
+	private void binaryBlastAnimation() {
+		for (int i=0 ; i<TEXT_BUFFER*2 ; i++) {
+			mehranSprite.move(3,0);
+			pause(10);
+		}
+		for (int i=0 ; i<25 ; i++) {
+			binaryBlast bb = new binaryBlast
+				(mehranSprite.getX()+mehranSprite.getWidth()/2,3*mehranSprite.getY()/2,APPLICATION_WIDTH);
+			add(bb);
+			Thread t = new Thread(bb);
+			t.start();
+			pause(100);
+		}
+		binaryBlastSound.play();
+		animateShake(enemySprite);
+	}
+	
+	private void animateShake(GImage sprite) {
+		for(int i=0 ; i<10*4 ; i++) {
+			switch (i%4) {
+			case 0: sprite.move(-6, 0);
+					pause(10);
+				break;
+			case 1: sprite.move(-6, 0);
+					pause(10);
+					break;
+			case 2: sprite.move(6, 0);
+					pause(10);
+					break;
+			case 3: sprite.move(6, 0);
+					pause(10);
+					break;
+			}
+		}
+	}
+	
+	private void animateFeint(GImage sprite) {
+		if (sprite==mehranSprite) {
+			for (int i=0; i<(int)mehranSprite.getHeight()+1 ; i++) {
+				GLine t = new GLine(mehranSprite.getX(),mehranSprite.getY()+i,
+						mehranSprite.getX()+mehranSprite.getWidth(),mehranSprite.getY()+i);
+				t.setColor(Color.WHITE);
+				add(t);
+				pause(3);
+			}
+		}
+		else {
+			for (int i=0; i<(int)enemySprite.getHeight()+1 ; i++) {
+				GLine t = new GLine(enemySprite.getX(),enemySprite.getY()+enemySprite.getHeight()-i,
+						enemySprite.getX()+enemySprite.getWidth(),enemySprite.getY()+enemySprite.getHeight()-i);
+				t.setColor(Color.WHITE);
+				add(t);
+				pause(3);
+			}
+		}
+	}
+	
+	private void tackleAnimation() {
+		
+		for (int i=0 ; i<TEXT_BUFFER*3 ; i++) {
+			enemySprite.move(-4,0);
+			pause(5);
+		}
+		pause(250);
+		tackle.play();
+		animateShake(mehranSprite);
+	}
+	
+	private void attack(PokemehranCharacter attacker,PokemehranCharacter defender) {
+		int attack = attacker.getAttack()+attacker.getTempAttack();
+		int defense = defender.getDefense()+defender.getTempAttack();
+		boolean criticalHit = rgen.nextBoolean(.05);
+		int damageDone;
+		if (attack-1 > defense && criticalHit == true) {
+			damageDone = 18*(attack-defense+rgen.nextInt(-1,1))/10;
+			defender.hpDown(damageDone);
+			updateBattleMessage("Critical Hit for "+damageDone+" damage!");
+		}
+		else if(attack-1 > defense) {
+			damageDone = attack-defense+rgen.nextInt(-1,1);
+			defender.hpDown(damageDone);
+			updateBattleMessage("Attack caused "+damageDone+" damage.");
+		}
+		else {
+			damageDone = rgen.nextInt(1,2);
+			defender.hpDown(damageDone);
+			updateBattleMessage("Attack caused "+damageDone+" damage.");
+		}		
+	}
+	
+	private void item() {
+		add(I_FRAME,P_FRAME.getX(),P_FRAME.getY());
+		takeCommand = true;
+		while (true) {
+			if (battleCommand.equals("q")) {
+				takeCommand = false;
+				remove(I_FRAME);
+				break;
+			}
+			if (battleCommand.equals("w")&& mehran.getItem("Potion")>0) {
+				takeCommand = false;
+				
+				updateBattleMessage("Player used a Potion.");
+				pause(1000);
+				updateBattleMessage("Mehran recovered some HP.");
+				remove(I_FRAME);
+				pause(600);
+				mehran.hpUp(50);
+				mehran.removeItem("Potion");
+				
+				battleCommand = "";
+				break;
+			}
+			if (battleCommand.equals("e")&& mehran.getItem("X Potion")>0) {
+				takeCommand = false;
+				
+				updateBattleMessage("Player used an X Potion.");
+				pause(1000);
+				updateBattleMessage("Mehran recovered all his HP.");
+				remove(I_FRAME);
+				pause(600);
+				mehran.heal();
+				mehran.removeItem("X Potion");
+				
+				battleCommand = "";
+				break;
+			}
+			if (battleCommand.equals("s")&& mehran.getItem("Attack Up")>0) {
+				takeCommand = false;
+				
+				updateBattleMessage("Player used Attack Up.");
+				pause(1000);
+				updateBattleMessage("Mehran's attack increased.");
+				remove(I_FRAME);
+				pause(600);
+				mehran.tempAttackUp(mehran.getAttack()/2);
+				mehran.removeItem("Attack Up");
+				
+				battleCommand = "";
+				break;
+			}
+			if (battleCommand.equals("d")&& mehran.getItem("Defense Up")>0) {
+				takeCommand = false;
+				
+				updateBattleMessage("Player used Defense Up.");
+				pause(1000);
+				updateBattleMessage("Mehran's defense increased.");
+				remove(I_FRAME);
+				pause(600);
+				mehran.tempDefenseUp(mehran.getDefense()/2);
+				mehran.removeItem("Defense Up");
+				
+				battleCommand = "";
+				break;
+			}
+		}
+	}
+
+	private boolean escape(PokemehranCharacter escapee, PokemehranCharacter pursuer) {
+		updateBattleMessage("Trying to escape...");
+		pause(1000);
+		int check = rgen.nextInt(-3,pursuer.getSpeed()-escapee.getSpeed());
+		if (check == 1 || check<=-3) {
+			updateBattleMessage("Escaped!");
+			pause(1000);
+			return true;
+		}
+		updateBattleMessage("Couldn't Escape.");
+		return false;
+	}
+	
+	private void enemyBattleTurn() {
+		updateBattleMessage("Enemy "+enemy.getName()+"'s turn.");
+		pause(rgen.nextInt(1000,2500));
+		if(enemy.getLevel()<mehran.getLevel()/5) {
+			run();
+		}
+		else {
+			updateBattleMessage("Enemy "+enemy.getName()+" attacks!");
+			pause(750);
+			tackleAnimation();
+			attack(enemy,mehran);
+		}
+		pause(1250);
+		update();
+	}
+	
+	private void getDataForBattle() {
+		mehran.clearTempStats();
+		if(playerWon == true) {
+			victory.play();
+			mehran.expUp(enemy.getExperience());
+			mehran.moneyUp(enemy.getMoney());
+			
+			GImage infoBack = new GImage("battle\\blankBattleFrame.png");
+			add(infoBack);
+			GLabel exp = new GLabel 
+					("Mehran gained "+enemy.getExperience()+" exp. points.",eInfo.getX(),eInfo.getY());
+			GLabel monies = new GLabel
+					("Player received $"+enemy.getMoney()+".",eHP.getX(),eHP.getY());
+			GLabel click2cont = new GLabel("Click to Continue",eHPbar.getX(),eHPbar.getY()+eHP.getAscent());
+			exp.setFont(new Font("helvetica",Font.BOLD,28));
+			monies.setFont(new Font("helvetica",Font.BOLD,28));
+			click2cont.setFont(new Font("helvetica",Font.BOLD,28));
+			add(exp);
+			add(monies);
+			add(click2cont);
+			waitForClick();
+			levelUpData();
+			victory.stop();
+		}
+	}
+	
+	private void levelUpData() {
+		if (mehran.getToNextLevel() <= 0) {
+			int aPrev = mehran.getAttack();
+			int dPrev = mehran.getDefense();
+			int sPrev = mehran.getSpeed();
+			int hpPrev = mehran.getHPMax();
+			mehran.levelUp();
+			update();
+			remove(enemySprite);
+			add(B_FRAME);
+			int aUp = mehran.getAttack()-aPrev;
+			int dUp = mehran.getDefense()-dPrev;
+			int sUp = mehran.getSpeed()-sPrev;
+			int hpUp = mehran.getHPMax()-hpPrev;
+			GLabel lvlUp = new GLabel("Mehran grew to level "+mehran.getLevel()+"!",eInfo.getX(),eInfo.getY());
+			GLabel a = new GLabel("Attack increased by "+aUp+".",eHP.getX(),eHP.getY());
+			GLabel d = new GLabel("Defense increased by "+dUp+".",eHPbar.getX(),eHPbar.getY()+eHP.getAscent());
+			GLabel s = new GLabel("Speed increased by "+sUp+".",eHP.getX(),eHP.getY());
+			GLabel hp = new GLabel("HP increased by "+hpUp+".",eHPbar.getX(),eHPbar.getY()+eHP.getAscent());
+			lvlUp.setFont(new Font("helvetica",Font.BOLD,28));
+			a.setFont(new Font("helvetica",Font.BOLD,24));
+			d.setFont(new Font("helvetica",Font.BOLD,24));
+			s.setFont(new Font("helvetica",Font.BOLD,24));
+			hp.setFont(new Font("helvetica",Font.BOLD,24));
+			add(lvlUp);
+			add(a);
+			add(d);
+			pause(5000);
+			remove(a);
+			remove(d);
+			add(s);
+			add(hp);
+			pause(2000);
+			waitForClick();
+		}	
+	}
+	
+	// need to add back currentBack and character and music
+	private void battleCheck() {
+		if (mapArray[charY][charX].equals("g-") && rgen.nextInt(1,BATTLE_PROB)==1 && sameSquare == false) {
+			inBattle = true;
+			switch (rgen.nextInt(1,2)) {
+			case 1: enemy = new PokemehranCharacter("characters\\hardDrive");
+				break;
+			case 2: enemy = new PokemehranCharacter("characters\\iPhone");	
+				break;
+			}
+			battle();
+		}
+	}
+		
+	private void addWorldMapAfterBattle() {
+		mainTheme.loop();
+		add(currentBack);
+		add(character);
+		inBattle = false;
+	}
+	
+	private void pregameSetup() {
+		loadMaps();
+		introduction();
+		newOrSavedGame();
+	}
+	
+	private void loadMaps() {
+		
+	}
+	
+	
+	private void introduction() {
+		preludeTheme.loop();
+		IntroScreen intro = new IntroScreen();
+		add(intro);
+		while (notClicked == true) {
+		intro.animate();
+		}
+		remove(intro);
+	}
+	// change commented out music
+	private void newOrSavedGame() {
+		newContinue screen = new newContinue();
+		add(screen);
+		while(true) {
+			if (motionDirection == 'w' || motionDirection == 's') {
+				screen.movePointer();
+				motionDirection = 'n';
+			}
+			else if(motionDirection == ' ') {
+				if (screen.getNewGameSelected()==true) {
+					currentBack = world;
+					charXpixel = N_UNITS_W/2*UNIT_W;
+					charYpixel = N_UNITS_H/2*UNIT_H;
+					character.setLocation(charXpixel,charYpixel);
+					characterCenteredH=true;
+					characterCenteredV=true;	
+					break;
+				}
+				else {
+					mehran = new PokemehranCharacter("continue");
+					try {
+						BufferedReader rd = new BufferedReader(new FileReader("continue.txt"));
+						for(int i=0 ; i<16 ; i++) {
+							rd.readLine();
+						}
+						String name = rd.readLine();
+						if (name.equals("world")) {
+							currentBack = world;
+						} else if(name.equals("store")) {
+							currentBack = store1;
+						}
+						currentBack.setLocation(Double.parseDouble(rd.readLine()),Double.parseDouble(rd.readLine()));
+						character.setLocation(Double.parseDouble(rd.readLine()),Double.parseDouble(rd.readLine()));
+					} catch(IOException ex) {
+						
+					}
+					break;
+				}
+			}
+		}
+		remove(screen);
+		preludeTheme.stop();
+	}
+	
+	private void motionOnMap() {
+		checkEdge();
+		checkCharacterEdge();
+		checkCharacterCentered();
+		checkWalkeable();
+		motion();
+	}
+	
+	private void checkSameSquare() {
+		if(charXprev == charX && charYprev == charY) {
+			sameSquare = true;
+		}
+		else {
+			sameSquare = false;
+		}
+	}
+	
+	private void getCharacterLocation() {
+		charXprev = charX;
+		charYprev = charY;
+		charX = (int)(character.getX()-currentBack.getX())/UNIT_W;
+		charY = (int)(character.getY()-currentBack.getY())/UNIT_H;
+	}
+	
+	private void checkWalkeable() {
+		
+		if(charX-1 > -1) {
+			if(walkeableArray[charY][charX-1].equals("n")) walkeable[A]=false;
+			else walkeable[A]=true;
+		}
+		if(charY-1 > -1) {
+			if(walkeableArray[charY-1][charX].equals("n")) walkeable[W]=false;
+			else walkeable[W]=true;
+		}
+		if(charX+1 < currentBack.getBackgroundWidth()) {
+				if(walkeableArray[charY][charX+1].equals("n")) walkeable[D]=false;
+				else walkeable[D]=true;
+		}
+		if(charY+1 < currentBack.getBackgroundHeight()) {
+			if(walkeableArray[charY+1][charX].equals("n")) walkeable[S]=false;
+			else walkeable[S]=true;
+		}
+	}
+	
+	private void checkCharacterEdge() {
+		if(character.getX()<=0) charEdgeReached[A]=true;
+		if(character.getY()<=0) charEdgeReached[W]=true;
+		if(character.getX()+character.getWidth()>=APPLICATION_WIDTH) charEdgeReached[D]=true;
+		if(character.getY()+character.getHeight()>=APPLICATION_HEIGHT) charEdgeReached[S]=true;
+	}
+	
+	private void checkCharacterCentered() {
+		if (getElementAt(N_UNITS_W/2*UNIT_W+character.getWidth()/2 , character.getY())==character) 
+				characterCenteredH=true;
+		else characterCenteredH=false;
+		
+		if (getElementAt(character.getX() , N_UNITS_H/2*UNIT_H+character.getHeight()/2)==character) 
+				characterCenteredV=true;
+		else characterCenteredV=false;
+	}
+	
+	private void checkEdge() {
+		if(currentBack.getX()>=0) edgeReached[A]=true;
+		else edgeReached[A]=false;
+		if(currentBack.getY()>=0) edgeReached[W]=true;
+		else edgeReached[W]=false;
+		if(currentBack.getX()+currentBack.getWidth()<=APPLICATION_WIDTH) edgeReached[D]=true;
+		else edgeReached[D]=false;
+		if(currentBack.getY()+currentBack.getHeight()<=APPLICATION_HEIGHT) edgeReached[S]=true;
+		else edgeReached[S]=false;
+	}
+	
+	private void motion() {
+		if (motionDirection=='a') {
+			changeCharacterDirection();
+			if(walkeable[A]==true) {
+				if (edgeReached[A]==false && characterCenteredH==true) {
+					moveLeft(currentBack);
+					edgeReached[D]=false;
+				}
+				else if(charEdgeReached[A]==false) {
+					moveRight(character);//left
+					charEdgeReached[D]=false;
+				}
+			}
+		}
+		else if (motionDirection=='s') {
+			changeCharacterDirection();
+			if(walkeable[S]==true){
+				if (edgeReached[S]==false && characterCenteredV==true) {
+					moveDown(currentBack);
+					edgeReached[W]=false;
+				}
+				else if(charEdgeReached[S]==false){
+					moveUp(character);//down
+					charEdgeReached[W]=false;
+				}
+			}
+		}
+		else if (motionDirection=='d') {
+			changeCharacterDirection();
+			if (walkeable[D]==true){
+				if (edgeReached[D]==false && characterCenteredH==true) {
+					moveRight(currentBack);
+					edgeReached[A]=false;
+				}
+				else if(charEdgeReached[D]==false){
+					moveLeft(character);//right
+					charEdgeReached[A]=false;
+				}
+			}
+		}
+		else if (motionDirection=='w') {
+			changeCharacterDirection();
+			if (walkeable[W]==true) {
+				if (edgeReached[W]==false && characterCenteredV==true) {
+					moveUp(currentBack);
+					edgeReached[S]=false;
+				}
+				else if(charEdgeReached[W]==false){
+					moveDown(character);//up
+					charEdgeReached[S]=false;
+				}
+			}
+		}
+		motionDirection=' ';
+	}
+	
+	private void checkPortal() {
+		if (mapArray[charY][charX].charAt(1)=='=') {
+			remove(currentBack);
+			remove(character);
+			if (inWorldMap==true) {
+				inWorldMap=false;
+				charXportal=character.getX();
+				charYportal=character.getY();
+				currentBack = store1;
+				createBackground();
+			} else if (inWorldMap==false) {
+				inWorldMap=true;
+				currentBack = world;
+				createBackground();
+			}
+		}
+	}
+	
+	private void changeCharacterDirection() {
+		double x = character.getX();
+		double y = character.getY();
+		remove(character);
+		if (motionDirection=='a') character = CHAR_LEFT;
+		else if (motionDirection=='s') character = CHAR_FRONT;
+		else if (motionDirection=='d') character = CHAR_RIGHT;
+		else if (motionDirection=='w') character = CHAR_BACK;
+		add(character,x,y);
+	}
+	
+	private void moveLeft(GObject toMove){
+		for (int i=0 ; i<UNIT_W/5 ; i++){
+			toMove.move(5,0);
+			pause(PAUSE_TIME);
+		}
+	}
+	
+	private void moveDown(GObject toMove){
+		for (int i=0 ; i<UNIT_H/5 ; i++){
+			toMove.move(0,-5);
+			pause(PAUSE_TIME);
+		}
+	}
+
+	private void moveRight(GObject toMove){
+		for (int i=0 ; i<UNIT_W/5 ; i++){
+			toMove.move(-5,0);
+			pause(PAUSE_TIME);
+		}
+	}
+
+	private void moveUp(GObject toMove){
+		for (int i=0 ; i<UNIT_H/5 ; i++){
+			toMove.move(0,5);
+			pause(PAUSE_TIME);
+		}
+	}
+	
+
+	
+	private void createBackground() {
+		checkEdge();
+		getCharacterLocation();
+		checkCharacterCentered();
+		if(edgeReached[A]==true||edgeReached[W]==true||edgeReached[S]==true||edgeReached[D]==true){
+			if(currentBack == world) {
+				charXpixel = charXportal;
+				charYpixel = charYportal+UNIT_H;
+			}
+			else {
+				int[] location = currentBack.getPortalLocation("p");
+				int y = location[0];
+				int x = location[1];
+				charXpixel = x*UNIT_W;
+				charYpixel = y*UNIT_H-UNIT_H;
+			}
+			add(currentBack);
+		}
+		else {
+			if (currentBack == world) currentBack.move(0, -UNIT_H);
+			add(currentBack);
+			charXpixel = N_UNITS_W/2*UNIT_W;
+			charYpixel = N_UNITS_H/2*UNIT_H;
+			characterCenteredH=true;
+			characterCenteredV=true;	
+		}
+		mapArray = currentBack.getMapArray();
+		walkeableArray = currentBack.getWalkeableArray();
+		add(character,charXpixel,charYpixel);
+		getCharacterLocation();
+	}
+	//change back commented out music
+	private void createInitialBackground() {
+		add(currentBack);
+		mapArray = currentBack.getMapArray();
+		walkeableArray = currentBack.getWalkeableArray();
+		add(character);
+		getCharacterLocation();
+		mainTheme.loop();
+	}
+}
+
+	

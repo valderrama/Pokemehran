@@ -1,0 +1,12 @@
+1 Name
+2 Image
+3 Attack Name
+4 Attack
+5 Defense
+6 Speed
+7 HPMax
+8 HPCurrent
+9 Level
+10 Experience
+11 To Next Level
+12 Money
